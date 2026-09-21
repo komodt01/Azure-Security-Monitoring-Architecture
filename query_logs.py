@@ -1,26 +1,35 @@
-from azure.identity import AzureCliCredential
-from azure.monitor.query import LogsQueryClient
+import os
 from datetime import timedelta
 
-# Replace with your actual Log Analytics Workspace ID
-workspace_id = "<your-workspace-id>"
+from azure.identity import AzureCliCredential
+from azure.monitor.query import LogsQueryClient
 
-# KQL query to get failed SSH login attempts
-query = '''
+
+# Log Analytics Workspace ID supplied through an environment variable.
+workspace_id = os.getenv("LOG_ANALYTICS_WORKSPACE_ID")
+
+# KQL query for authentication-related Syslog errors.
+query = """
 Syslog
 | where Facility == "authpriv"
 | where SeverityLevel == "err"
-| summarize count() by HostName
-'''
+| summarize FailedSSH=count() by HostName
+"""
+
 
 def main():
+    if not workspace_id:
+        raise ValueError(
+            "LOG_ANALYTICS_WORKSPACE_ID environment variable is not set."
+        )
+
     credential = AzureCliCredential()
     client = LogsQueryClient(credential)
 
     response = client.query_workspace(
-        workspace_id = "/subscriptions/7d939770-deef-433d-9283-5bd5eb79aeaf/resourceGroups/log-auto-rg/providers/Microsoft.OperationalInsights/workspaces/log-auto-ws",
+        workspace_id=workspace_id,
         query=query,
-        timespan=timedelta(hours=1)
+        timespan=timedelta(hours=1),
     )
 
     if response.tables:
@@ -28,7 +37,8 @@ def main():
             for row in table.rows:
                 print(row)
     else:
-        print("No results found or error occurred.")
+        print("No results returned.")
+
 
 if __name__ == "__main__":
     main()
